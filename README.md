@@ -5,7 +5,7 @@ A personal web app (works as a phone-installable PWA) that reads your Gmail (rea
 - **Tabs:** AI & Business · Growth · Important · Ask
 - **Cards:** 1–2 sentence summary, "why it matters", and an Open link to the Gmail thread
 - **Feedback:** "Tune ranking" on each card gives ▲/▼ for the sender and each topic. Ranking = model score + your weights
-- **Ask:** searches your stored emails and has Claude answer from them, citing sources
+- **Ask:** a tool-using assistant. Claude decides which searches to run (`search_emails`, `list_recent`, `list_by_sender`, `read_email`), reads what it needs, and answers with sources. Expand "search steps" under an answer to see what it did. It is read-only and keeps the last few turns as context.
 - Edit `data/profile.txt` to describe your interests; it steers the triage
 
 ## Try it now (no Gmail, sample emails)
@@ -40,7 +40,8 @@ Email text is stored in a local SQLite file (`data/agent.db`) and sent to the Cl
 
 ```
 app/gmail.py   read-only Gmail fetch + OAuth
-app/ai.py      triage (section, score, summary, topics) and chat
+app/ai.py      triage (section, score, summary, topics)
+app/agent.py   Ask tab: tool-use loop over your stored emails
 app/db.py      SQLite + full-text search + feedback weights
 app/main.py    API, ranking, background sync
 app/static/    PWA front end

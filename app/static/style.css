@@ -34,6 +34,8 @@ button { font: inherit; cursor: pointer; }
 .msg { padding: 10px 14px; border-radius: 14px; max-width: 92%; white-space: pre-wrap; }
 .msg.me { align-self: flex-end; background: var(--accent); color: var(--accent-ink); }
 .msg.bot { background: var(--card); border: 1px solid var(--line); }
+.msg details { margin-top: 8px; color: var(--muted); font-size: .85rem; }
+.msg summary { cursor: pointer; }
 .msg small { display: block; margin-top: 8px; color: var(--muted); }
 #askform { position: fixed; left: 0; right: 0; bottom: 0; display: flex; gap: 8px; padding: 10px 16px calc(10px + env(safe-area-inset-bottom)); background: var(--bg); border-top: 1px solid var(--line); max-width: 760px; margin: 0 auto; }
 #askform input { flex: 1; min-width: 0; padding: 10px 14px; border-radius: 999px; border: 1px solid var(--line); background: var(--card); color: var(--ink); font: inherit; }

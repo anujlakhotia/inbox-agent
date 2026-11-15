@@ -5,6 +5,7 @@ let token = "";
 try { token = localStorage.getItem("token") || ""; } catch {}
 let brief = {};
 let tab = "ai_business";
+let chatHistory = [];
 
 async function api(path, opts = {}) {
   const res = await fetch(path, {
@@ -99,9 +100,11 @@ $("#askform").addEventListener("submit", async (ev) => {
   const pending = document.createElement("div"); pending.className = "msg bot"; pending.textContent = "Reading your emails…";
   log.append(pending); pending.scrollIntoView({ block: "end" });
   try {
-    const r = await api("/api/chat", { method: "POST", body: JSON.stringify({ question: q }) });
-    const src = r.sources.map((s) => `${esc(s.sender)}: ${esc(s.subject)} (${esc(s.date)})`).join("<br>");
-    pending.innerHTML = `${esc(r.answer)}<small>Based on:<br>${src}</small>`;
+    const r = await api("/api/chat", { method: "POST", body: JSON.stringify({ question: q, history: chatHistory }) });
+    chatHistory.push({ role: "user", content: q }, { role: "assistant", content: r.answer });
+    const steps = r.steps.length ? `<details><summary>${r.steps.length} search step${r.steps.length > 1 ? "s" : ""}</summary>${r.steps.map((s) => `<div>${esc(s)}</div>`).join("")}</details>` : "";
+    const src = r.sources.length ? `<small>Based on:<br>${r.sources.map((s) => `${esc(s.sender)}: ${esc(s.subject)} (${esc(s.date)})`).join("<br>")}</small>` : "";
+    pending.innerHTML = `${esc(r.answer)}${steps}${src}`;
   } catch (e) { pending.textContent = "Error: " + e.message; }
   pending.scrollIntoView({ block: "end" });
 });

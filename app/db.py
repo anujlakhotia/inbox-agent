@@ -130,3 +130,40 @@ def search(question: str, limit: int = 8) -> list[dict]:
         if not rows:
             rows = c.execute("SELECT * FROM emails ORDER BY date DESC LIMIT ?", (limit,)).fetchall()
     return [dict(r) for r in rows]
+
+
+def search_emails(query: str, days: int | None = None, limit: int = 8) -> list[dict]:
+    """Keyword search (no fallback to 'recent'), optionally limited to the last N days."""
+    words = re.findall(r"[A-Za-z0-9]{2,}", query.lower())[:12]
+    if not words:
+        return []
+    q = " OR ".join(f'"{w}"' for w in words)
+    sql = "SELECT e.* FROM emails_fts f JOIN emails e ON e.id = f.id WHERE emails_fts MATCH ?"
+    args: list = [q]
+    if days:
+        sql += " AND e.date >= datetime('now', ?)"
+        args.append(f"-{days} days")
+    with conn() as c:
+        rows = c.execute(sql + " ORDER BY rank LIMIT ?", (*args, limit)).fetchall()
+    return [dict(r) for r in rows]
+
+
+def by_sender(sender: str, limit: int = 8) -> list[dict]:
+    like = f"%{sender.lower()}%"
+    with conn() as c:
+        rows = c.execute(
+            "SELECT * FROM emails WHERE lower(sender) LIKE ? OR sender_email LIKE ? ORDER BY date DESC LIMIT ?",
+            (like, like, limit),
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def recent(days: int = 3, section: str | None = None, limit: int = 15) -> list[dict]:
+    sql = "SELECT * FROM emails WHERE date >= datetime('now', ?)"
+    args: list = [f"-{days} days"]
+    if section:
+        sql += " AND section = ?"
+        args.append(section)
+    with conn() as c:
+        rows = c.execute(sql + " ORDER BY date DESC LIMIT ?", (*args, limit)).fetchall()
+    return [dict(r) for r in rows]

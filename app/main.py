@@ -13,7 +13,7 @@ from fastapi.responses import FileResponse  # noqa: E402
 from fastapi.staticfiles import StaticFiles  # noqa: E402
 from pydantic import BaseModel  # noqa: E402
 
-from . import ai, db  # noqa: E402
+from . import agent, ai, db  # noqa: E402
 
 LOOKBACK_DAYS = int(os.getenv("LOOKBACK_DAYS", "3"))
 SYNC_EVERY_HOURS = float(os.getenv("SYNC_EVERY_HOURS", "6"))
@@ -131,12 +131,12 @@ def reset_weight(key: str):
 
 class Ask(BaseModel):
     question: str
+    history: list = []
 
 
 @app.post("/api/chat", dependencies=[Depends(auth)])
 def chat(a: Ask):
-    emails = db.search(a.question)
-    return {"answer": ai.chat(a.question, emails), "sources": [{"subject": e["subject"], "sender": e["sender"], "date": e["date"][:10]} for e in emails]}
+    return agent.ask(a.question, a.history)
 
 
 STATIC = Path(__file__).parent / "static"

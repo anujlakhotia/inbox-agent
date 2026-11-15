@@ -136,7 +136,16 @@ class Ask(BaseModel):
 
 @app.post("/api/chat", dependencies=[Depends(auth)])
 def chat(a: Ask):
-    return agent.ask(a.question, a.history)
+    import anthropic
+
+    try:
+        return agent.ask(a.question, a.history)
+    except anthropic.AuthenticationError:
+        raise HTTPException(502, "Claude rejected the API key. Check ANTHROPIC_API_KEY in .env and restart.")
+    except anthropic.NotFoundError:
+        raise HTTPException(502, f"Model not available to your account: {agent.MODEL}. Set AGENT_MODEL in .env.")
+    except anthropic.APIError as ex:
+        raise HTTPException(502, f"Claude API error: {ex.message}")
 
 
 STATIC = Path(__file__).parent / "static"

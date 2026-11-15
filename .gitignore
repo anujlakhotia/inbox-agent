@@ -1,0 +1,14 @@
+# secrets and personal data: never commit
+.env
+data/credentials.json
+data/token.json
+data/*.db
+
+# environment / OS
+.venv/
+__pycache__/
+*.pyc
+.DS_Store
+
+# any other Google OAuth downloads
+data/client_secret*.json

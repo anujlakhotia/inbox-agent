@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Inbox Agent</title>
+  <meta name="theme-color" content="#faf9f6">
+  <link rel="manifest" href="/manifest.json">
+  <link rel="icon" href="/icon.svg">
+  <link rel="apple-touch-icon" href="/icon.svg">
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header>
+    <h1>Today</h1>
+    <button id="sync" class="ghost" title="Check Gmail now">Refresh</button>
+  </header>
+  <nav id="tabs" role="tablist">
+    <button role="tab" data-tab="ai_business" class="active">AI &amp; Business <span class="count"></span></button>
+    <button role="tab" data-tab="growth">Growth <span class="count"></span></button>
+    <button role="tab" data-tab="important">Important <span class="count"></span></button>
+    <button role="tab" data-tab="ask">Ask</button>
+  </nav>
+  <main>
+    <section id="list"></section>
+    <section id="ask" hidden>
+      <div id="log"></div>
+      <form id="askform">
+        <input id="q" placeholder="Ask about your emails, e.g. what did I get on AI agents?" autocomplete="off" required>
+        <button>Send</button>
+      </form>
+    </section>
+  </main>
+  <div id="toast" role="status"></div>
+  <script src="/app.js"></script>
+</body>
+</html>

@@ -69,6 +69,13 @@ def usage_summary(days: int = 30) -> dict:
     return {"days": days, "by_model": rows}
 
 
+def days_since_newest() -> int:
+    """Whole days since the newest stored email (0 if the table is empty)."""
+    with conn() as c:
+        row = c.execute("SELECT CAST(julianday('now') - julianday(MAX(date)) AS INTEGER) FROM emails").fetchone()
+    return max(0, row[0] or 0)
+
+
 def known_ids() -> set[str]:
     with conn() as c:
         return {r["id"] for r in c.execute("SELECT id FROM emails")}

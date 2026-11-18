@@ -28,6 +28,10 @@ Open http://localhost:8000. Without `ANTHROPIC_API_KEY` it uses simple keyword r
 
 The app syncs on startup and every `SYNC_EVERY_HOURS`; the Refresh button syncs on demand.
 
+## Older mail
+
+A normal refresh fetches the last `LOOKBACK_DAYS` and also catches up on any time the app was off (up to 30 days). To load older mail once, run `python -m app.backfill 30` (any number of days); it fetches in batches of 100, triages each batch with Claude, and is safe to stop and re-run.
+
 ## Ask costs
 
 - Everyday questions use `AGENT_MODEL` (Sonnet); tick **Deep** in the Ask tab to use `AGENT_DEEP_MODEL` (Opus) for hard ones.

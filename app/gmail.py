@@ -85,13 +85,15 @@ def fetch_new(days: int, known: set[str], limit: int = 100):
     svc = _service()
     ids, token = [], None
     q = f"newer_than:{days}d -in:spam -in:trash -in:sent -in:drafts"
+    # Page (newest first) until we have `limit` emails we don't already store. Counting stored ones toward the
+    # limit would stop us before ever reaching older, unfetched mail.
     while len(ids) < limit:
         resp = svc.users().messages().list(userId="me", q=q, maxResults=100, pageToken=token).execute()
-        ids += [m["id"] for m in resp.get("messages", [])]
+        ids += [m["id"] for m in resp.get("messages", []) if m["id"] not in known]
         token = resp.get("nextPageToken")
         if not token:
             break
-    for mid in [i for i in ids if i not in known][:limit]:
+    for mid in ids[:limit]:
         time.sleep(0.2)  # stay well under Gmail's per-user rate limit
         m = _get_with_backoff(svc, mid)
         headers = {h["name"].lower(): h["value"] for h in m["payload"].get("headers", [])}

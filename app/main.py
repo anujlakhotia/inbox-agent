@@ -19,6 +19,7 @@ from . import agent, ai, db  # noqa: E402
 LOOKBACK_DAYS = int(os.getenv("LOOKBACK_DAYS", "3"))
 SYNC_EVERY_HOURS = float(os.getenv("SYNC_EVERY_HOURS", "6"))
 DEMO = os.getenv("DEMO") == "1"
+MAX_CATCHUP_DAYS = 30  # longest gap a normal refresh will automatically catch up on
 STEP = 1.5  # how far one tap on More/Less moves the ranking
 
 app = FastAPI(title="Inbox Agent")
@@ -31,7 +32,9 @@ def auth(x_token: Optional[str] = Header(default=None)):
         raise HTTPException(401, "Bad or missing token")
 
 
-def sync_now() -> dict:
+def sync_now(days: Optional[int] = None, limit: int = 100) -> dict:
+    """Fetch and triage new mail. `days` widens the window (backfill); by default the window also grows to cover
+    any time the app was off, so a refresh after a long gap catches up instead of silently skipping mail."""
     if not _sync_lock.acquire(blocking=False):
         return {"status": "already running"}
     try:
@@ -40,7 +43,8 @@ def sync_now() -> dict:
         else:
             from . import gmail
 
-            new = gmail.fetch_new(LOOKBACK_DAYS, db.known_ids())
+            window = days or max(LOOKBACK_DAYS, min(db.days_since_newest() + 1, MAX_CATCHUP_DAYS))
+            new = gmail.fetch_new(window, db.known_ids(), limit)
         fetched, error = 0, None
         try:
             for e in new:  # saved one by one so a mid-sync failure keeps what was fetched

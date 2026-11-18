@@ -4,6 +4,8 @@ import json
 import os
 from pathlib import Path
 
+from .textclean import clean
+
 MODEL = os.getenv("CLAUDE_MODEL", "claude-sonnet-5-5")
 SECTIONS = {"ai_business", "growth", "important", "skip"}
 PROFILE = Path("data/profile.txt")
@@ -51,7 +53,7 @@ def classify(emails: list[dict]) -> list[dict]:
     for start in range(0, len(emails), 10):
         batch = emails[start : start + 10]
         payload = "\n\n".join(
-            f"[{i}] From: {e['sender']} <{e['sender_email']}>\nSubject: {e['subject']}\n{(e['body'] or e['snippet'])[:1800]}"
+            f"[{i}] From: {e['sender']} <{e['sender_email']}>\nSubject: {e['subject']}\n{clean(e['body'] or e['snippet'])[:1800]}"
             for i, e in enumerate(batch)
         )
         try:

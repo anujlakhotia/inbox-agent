@@ -28,6 +28,12 @@ CREATE TABLE IF NOT EXISTS weights (
     value REAL NOT NULL
 );
 CREATE VIRTUAL TABLE IF NOT EXISTS emails_fts USING fts5(id UNINDEXED, subject, sender, body);
+CREATE TABLE IF NOT EXISTS usage (   -- one row per Ask question; no question text is stored
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts TEXT DEFAULT CURRENT_TIMESTAMP,
+    model TEXT, deep INTEGER, steps INTEGER,
+    input_tokens INTEGER, output_tokens INTEGER, cache_read INTEGER, cache_write INTEGER, ms INTEGER
+);
 """
 
 
@@ -41,6 +47,26 @@ def conn():
 def init():
     with conn() as c:
         c.executescript(SCHEMA)
+
+
+def log_usage(u: dict, deep: bool):
+    with conn() as c:
+        c.execute(
+            "INSERT INTO usage (model, deep, steps, input_tokens, output_tokens, cache_read, cache_write, ms) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (u["model"], int(deep), u["steps"], u["input"], u["output"], u["cache_read"], u["cache_write"], u["ms"]),
+        )
+
+
+def usage_summary(days: int = 30) -> dict:
+    with conn() as c:
+        rows = [dict(r) for r in c.execute(
+            "SELECT model, COUNT(*) AS questions, SUM(steps) AS steps, SUM(input_tokens) AS input_tokens, "
+            "SUM(output_tokens) AS output_tokens, SUM(cache_read) AS cache_read, SUM(cache_write) AS cache_write, "
+            "CAST(AVG(ms) AS INTEGER) AS avg_ms FROM usage WHERE ts >= datetime('now', ?) GROUP BY model",
+            (f"-{int(days)} days",),
+        )]
+    return {"days": days, "by_model": rows}
 
 
 def known_ids() -> set[str]:

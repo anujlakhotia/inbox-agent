@@ -100,11 +100,13 @@ $("#askform").addEventListener("submit", async (ev) => {
   const pending = document.createElement("div"); pending.className = "msg bot"; pending.textContent = "Reading your emails…";
   log.append(pending); pending.scrollIntoView({ block: "end" });
   try {
-    const r = await api("/api/chat", { method: "POST", body: JSON.stringify({ question: q, history: chatHistory }) });
+    const r = await api("/api/chat", { method: "POST", body: JSON.stringify({ question: q, history: chatHistory, deep: $("#deep").checked }) });
     chatHistory.push({ role: "user", content: q }, { role: "assistant", content: r.answer });
     const steps = r.steps.length ? `<details><summary>${r.steps.length} search step${r.steps.length > 1 ? "s" : ""}</summary>${r.steps.map((s) => `<div>${esc(s)}</div>`).join("")}</details>` : "";
     const src = r.sources.length ? `<small>Based on:<br>${r.sources.map((s) => `${esc(s.sender)}: ${esc(s.subject)} (${esc(s.date)})`).join("<br>")}</small>` : "";
-    pending.innerHTML = `${esc(r.answer)}${steps}${src}`;
+    const u = r.usage, k = (n) => (n / 1000).toFixed(1) + "k";
+    const cost = u ? `<small class="usage">${esc(u.model)} · ${u.steps} step${u.steps === 1 ? "" : "s"} · ${k(u.input + u.cache_read + u.cache_write)} in (${k(u.cache_read)} cached) · ${u.output} out · ${(u.ms / 1000).toFixed(1)}s</small>` : "";
+    pending.innerHTML = `${esc(r.answer)}${steps}${src}${cost}`;
   } catch (e) { pending.textContent = "Error: " + e.message; }
   pending.scrollIntoView({ block: "end" });
 });

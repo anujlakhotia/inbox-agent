@@ -40,5 +40,7 @@ button { font: inherit; cursor: pointer; }
 #askform { position: fixed; left: 0; right: 0; bottom: 0; display: flex; gap: 8px; padding: 10px 16px calc(10px + env(safe-area-inset-bottom)); background: var(--bg); border-top: 1px solid var(--line); max-width: 760px; margin: 0 auto; }
 #askform input { flex: 1; min-width: 0; padding: 10px 14px; border-radius: 999px; border: 1px solid var(--line); background: var(--card); color: var(--ink); font: inherit; }
 #askform button { border-radius: 999px; padding: 0 18px; border: 1px solid var(--accent); }
+.deep { display: flex; align-items: center; gap: 4px; font-size: .85rem; color: var(--muted); white-space: nowrap; }
+.msg .usage { font-size: .75rem; }
 #toast { position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%); background: var(--ink); color: var(--bg); padding: 8px 14px; border-radius: 8px; opacity: 0; transition: opacity .2s; pointer-events: none; font-size: .9rem; }
 #toast.show { opacity: 1; }

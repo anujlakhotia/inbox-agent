@@ -132,6 +132,7 @@ def reset_weight(key: str):
 class Ask(BaseModel):
     question: str
     history: list = []
+    deep: bool = False  # use the stronger (pricier) model
 
 
 @app.post("/api/chat", dependencies=[Depends(auth)])
@@ -139,13 +140,21 @@ def chat(a: Ask):
     import anthropic
 
     try:
-        return agent.ask(a.question, a.history)
+        return agent.ask(a.question, a.history, a.deep)
     except anthropic.AuthenticationError:
         raise HTTPException(502, "Claude rejected the API key. Check ANTHROPIC_API_KEY in .env and restart.")
     except anthropic.NotFoundError:
-        raise HTTPException(502, f"Model not available to your account: {agent.MODEL}. Set AGENT_MODEL in .env.")
+        raise HTTPException(
+            502, f"Model not available to your account ({agent.DEEP_MODEL if a.deep else agent.MODEL}). "
+            "Set AGENT_MODEL / AGENT_DEEP_MODEL in .env."
+        )
     except anthropic.APIError as ex:
         raise HTTPException(502, f"Claude API error: {ex.message}")
+
+
+@app.get("/api/usage", dependencies=[Depends(auth)])
+def usage(days: int = 30):
+    return db.usage_summary(days)
 
 
 STATIC = Path(__file__).parent / "static"

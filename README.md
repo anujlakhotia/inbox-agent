@@ -28,6 +28,12 @@ Open http://localhost:8000. Without `ANTHROPIC_API_KEY` it uses simple keyword r
 
 The app syncs on startup and every `SYNC_EVERY_HOURS`; the Refresh button syncs on demand.
 
+## Ask costs
+
+- Everyday questions use `AGENT_MODEL` (Sonnet); tick **Deep** in the Ask tab to use `AGENT_DEEP_MODEL` (Opus) for hard ones.
+- Prompt caching is on, so each step of the loop re-reads earlier context at a fraction of the price. Email bodies are cleaned (quoted replies, signatures, footers, long tracking links removed) before the model sees them, and the loop is capped at 5 steps (the last one must answer).
+- Every answer shows its model, steps, tokens (and how many were cached) and time. `GET /api/usage` totals this per model for the last 30 days. Question text is never stored.
+
 ## Use it on your phone
 
 Same Wi-Fi: open `http://<your-computer-ip>:8000` on the phone and "Add to Home Screen". For access anywhere, deploy to a small host with a persistent disk (Fly.io, Railway, a VPS) and keep `data/` on that disk, or use a tunnel (Tailscale, Cloudflare Tunnel). Always set `APP_TOKEN` and serve over HTTPS. Note: Gmail OAuth for a Desktop client must be authorised on a machine with a browser, then copy `data/token.json` to the server.
@@ -42,7 +48,8 @@ Email text is stored in a local SQLite file (`data/agent.db`) and sent to the Cl
 app/gmail.py   read-only Gmail fetch + OAuth
 app/ai.py      triage (section, score, summary, topics)
 app/agent.py   Ask tab: tool-use loop over your stored emails
-app/db.py      SQLite + full-text search + feedback weights
+app/textclean.py  strips quotes, signatures and footers from email text
+app/db.py      SQLite + full-text search + feedback weights + usage log
 app/main.py    API, ranking, background sync
 app/static/    PWA front end
 ```

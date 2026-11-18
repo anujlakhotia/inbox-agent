@@ -82,13 +82,14 @@ def _preview(e: dict) -> dict:
     }
 
 
-def _run_tool(name: str, args: dict, seen: dict) -> str:
+def _run_tool(name: str, args: dict, seen: dict, opened: dict) -> str:
+    """`seen` collects every email shown to the model; `opened` only those it read in full (its real sources)."""
     limit = max(1, min(int(args.get("limit") or 8), 20))
     if name == "read_email":
         e = db.get_email(str(args.get("id", "")))
         if not e:
             return json.dumps({"error": "no email with that id"})
-        seen[e["id"]] = e
+        seen[e["id"]] = opened[e["id"]] = e
         return json.dumps({**_preview(e), "body": clean(e["body"] or e["snippet"] or "")[:READ_CHARS]})
     if name == "search_emails":
         rows = db.search_emails(str(args.get("query", "")), args.get("days"), limit)
@@ -183,7 +184,11 @@ def ask_stream(question: str, history: list[dict] | None = None, deep: bool = Fa
     while prior and prior[0]["role"] != "user":
         prior.pop(0)
     messages = [*prior, {"role": "user", "content": question}]
-    steps, seen, done_calls = [], {}, {}
+    steps, seen, opened, done_calls = [], {}, {}, {}
+
+    def sources() -> list:
+        # Emails it actually read; if it answered from previews alone, fall back to what it was shown.
+        return [_src(e) for e in (opened or seen).values()][:8]
     usage, started = _Usage(), time.time()
 
     def finish(answer: str, sources: list) -> dict:
@@ -219,7 +224,7 @@ def ask_stream(question: str, history: list[dict] | None = None, deep: bool = Fa
             text = "".join(b.text for b in resp.content if b.type == "text").strip()
             if resp.stop_reason == "max_tokens":
                 text += "\n\n(Answer was cut off.)"
-            yield finish(text or "I couldn't produce an answer.", [_src(e) for e in seen.values()][:8])
+            yield finish(text or "I couldn't produce an answer.", sources())
             return
         if streamed:
             yield {"type": "reset"}  # preamble before a tool call is not part of the answer
@@ -235,13 +240,13 @@ def ask_stream(question: str, history: list[dict] | None = None, deep: bool = Fa
                     if key in done_calls:  # the model repeated itself: don't pay to resend the same results
                         out = json.dumps({"note": "Identical call already made earlier; use those results."})
                     else:
-                        out = done_calls[key] = _run_tool(b.name, b.input, seen)
+                        out = done_calls[key] = _run_tool(b.name, b.input, seen, opened)
                     results.append({"type": "tool_result", "tool_use_id": b.id, "content": out})
                 except Exception as ex:
                     results.append({"type": "tool_result", "tool_use_id": b.id, "content": str(ex), "is_error": True})
         messages.append({"role": "user", "content": results})  # all results in one message
     yield finish("I searched a lot but couldn't settle on an answer. Try narrowing the question.",
-                 [_src(e) for e in seen.values()][:8])
+                 sources())
 
 
 def ask(question: str, history: list[dict] | None = None, deep: bool = False) -> dict:

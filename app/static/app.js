@@ -21,6 +21,31 @@ async function api(path, opts = {}) {
   return res.json();
 }
 
+// Reads the agent's newline-delimited JSON events as they arrive and passes each to onEvent.
+async function streamChat(body, onEvent) {
+  const res = await fetch("/api/chat/stream", {
+    method: "POST", headers: { "Content-Type": "application/json", "X-Token": token }, body: JSON.stringify(body),
+  });
+  if (res.status === 401) {
+    token = prompt("Enter your app token") || "";
+    try { localStorage.setItem("token", token); } catch {}
+    return streamChat(body, onEvent);
+  }
+  if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || res.statusText);
+  const reader = res.body.getReader(), dec = new TextDecoder();
+  let buf = "";
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buf += dec.decode(value, { stream: true });
+    let i;
+    while ((i = buf.indexOf("\n")) >= 0) {
+      const line = buf.slice(0, i).trim(); buf = buf.slice(i + 1);
+      if (line) onEvent(JSON.parse(line));
+    }
+  }
+}
+
 function toast(msg) {
   const t = $("#toast");
   t.textContent = msg; t.classList.add("show");
@@ -97,10 +122,20 @@ $("#askform").addEventListener("submit", async (ev) => {
   $("#q").value = "";
   const log = $("#log");
   log.insertAdjacentHTML("beforeend", `<div class="msg me">${esc(q)}</div>`);
-  const pending = document.createElement("div"); pending.className = "msg bot"; pending.textContent = "Reading your emails…";
+  const pending = document.createElement("div"); pending.className = "msg bot";
+  pending.innerHTML = `<div class="status">Reading your emails…</div><div class="ans"></div>`;
+  const status = $(".status", pending), ans = $(".ans", pending);
   log.append(pending); pending.scrollIntoView({ block: "end" });
   try {
-    const r = await api("/api/chat", { method: "POST", body: JSON.stringify({ question: q, history: chatHistory, deep: $("#deep").checked }) });
+    let text = "", r = null;
+    await streamChat({ question: q, history: chatHistory, deep: $("#deep").checked }, (ev) => {
+      if (ev.type === "step") { status.hidden = false; status.textContent = ev.text + "…"; }
+      else if (ev.type === "reset") { text = ""; ans.textContent = ""; status.hidden = false; }
+      else if (ev.type === "delta") { text += ev.text; ans.textContent = text; status.hidden = true; pending.scrollIntoView({ block: "end" }); }
+      else if (ev.type === "done") r = ev;
+      else if (ev.type === "error") throw new Error(ev.message);
+    });
+    if (!r) throw new Error("The connection ended before an answer arrived.");
     chatHistory.push({ role: "user", content: q }, { role: "assistant", content: r.answer });
     const steps = r.steps.length ? `<details><summary>${r.steps.length} search step${r.steps.length > 1 ? "s" : ""}</summary>${r.steps.map((s) => `<div>${esc(s)}</div>`).join("")}</details>` : "";
     const src = r.sources.length ? `<small>Based on:<br>${r.sources.map((s) => `${esc(s.sender)}: ${esc(s.subject)} (${esc(s.date)})`).join("<br>")}</small>` : "";

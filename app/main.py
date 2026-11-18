@@ -1,4 +1,5 @@
 import asyncio
+import json
 import os
 import threading
 from typing import Optional
@@ -9,7 +10,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from fastapi import Depends, FastAPI, Header, HTTPException  # noqa: E402
-from fastapi.responses import FileResponse  # noqa: E402
+from fastapi.responses import FileResponse, StreamingResponse  # noqa: E402
 from fastapi.staticfiles import StaticFiles  # noqa: E402
 from pydantic import BaseModel  # noqa: E402
 
@@ -135,21 +136,49 @@ class Ask(BaseModel):
     deep: bool = False  # use the stronger (pricier) model
 
 
-@app.post("/api/chat", dependencies=[Depends(auth)])
-def chat(a: Ask):
+def _claude_error(ex: Exception, deep: bool) -> Optional[str]:
+    """A readable message for Claude API failures, or None if it isn't one."""
     import anthropic
 
+    if isinstance(ex, anthropic.AuthenticationError):
+        return "Claude rejected the API key. Check ANTHROPIC_API_KEY in .env and restart."
+    if isinstance(ex, anthropic.NotFoundError):
+        return (f"Model not available to your account ({agent.DEEP_MODEL if deep else agent.MODEL}). "
+                "Set AGENT_MODEL / AGENT_DEEP_MODEL in .env.")
+    if isinstance(ex, anthropic.APIError):
+        return f"Claude API error: {ex.message}"
+    return None
+
+
+@app.post("/api/chat", dependencies=[Depends(auth)])
+def chat(a: Ask):
     try:
         return agent.ask(a.question, a.history, a.deep)
-    except anthropic.AuthenticationError:
-        raise HTTPException(502, "Claude rejected the API key. Check ANTHROPIC_API_KEY in .env and restart.")
-    except anthropic.NotFoundError:
-        raise HTTPException(
-            502, f"Model not available to your account ({agent.DEEP_MODEL if a.deep else agent.MODEL}). "
-            "Set AGENT_MODEL / AGENT_DEEP_MODEL in .env."
-        )
-    except anthropic.APIError as ex:
-        raise HTTPException(502, f"Claude API error: {ex.message}")
+    except Exception as ex:
+        msg = _claude_error(ex, a.deep)
+        if msg:
+            raise HTTPException(502, msg)
+        raise
+
+
+@app.post("/api/chat/stream", dependencies=[Depends(auth)])
+def chat_stream(a: Ask):
+    """Same as /api/chat, but streams newline-delimited JSON events as the agent works."""
+
+    def events():
+        try:
+            for ev in agent.ask_stream(a.question, a.history, a.deep):
+                yield json.dumps(ev) + "\n"
+        except Exception as ex:
+            msg = _claude_error(ex, a.deep)
+            if not msg:
+                print("chat stream failed:", ex)
+            yield json.dumps({"type": "error", "message": msg or "Something went wrong. Check the server log."}) + "\n"
+
+    return StreamingResponse(
+        events(), media_type="application/x-ndjson",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},  # no proxy buffering
+    )
 
 
 @app.get("/api/usage", dependencies=[Depends(auth)])

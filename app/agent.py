@@ -108,7 +108,8 @@ def _describe(name: str, args: dict) -> str:
     return f"{name.replace('_', ' ')}: {detail}".strip(": ")
 
 
-def _create(c, messages, model: str, force_answer: bool):
+def _stream_step(c, messages, model: str, force_answer: bool):
+    """Generator: yields ("delta", text) while the model writes; returns the final message."""
     import anthropic
 
     kwargs = dict(
@@ -123,11 +124,22 @@ def _create(c, messages, model: str, force_answer: bool):
     )
     if force_answer:
         kwargs["tool_choice"] = {"type": "none"}  # tools stay listed (keeps the cache), but the model must answer
-    try:
-        # Opus 5.5 can be declined by safety classifiers; fall back server-side instead of failing.
-        return c.beta.messages.create(betas=["server-side-fallback-2026-07-01"], fallbacks="default", **kwargs)
-    except anthropic.BadRequestError:
-        return c.messages.create(**kwargs)
+    started = False
+    for use_beta in (True, False):
+        try:
+            if use_beta:
+                # Opus 5.5 can be declined by safety classifiers; fall back server-side instead of failing.
+                mgr = c.beta.messages.stream(betas=["server-side-fallback-2026-07-01"], fallbacks="default", **kwargs)
+            else:
+                mgr = c.messages.stream(**kwargs)
+            with mgr as s:
+                for text in s.text_stream:
+                    started = True
+                    yield ("delta", text)
+                return s.get_final_message()
+        except anthropic.BadRequestError:
+            if not use_beta or started:
+                raise
 
 
 class _Usage:
@@ -144,17 +156,23 @@ class _Usage:
         self.cache_write += getattr(u, "cache_creation_input_tokens", 0) or 0
 
 
-def ask(question: str, history: list[dict] | None = None, deep: bool = False) -> dict:
-    """Returns {"answer", "steps", "sources", "usage"}."""
+def ask_stream(question: str, history: list[dict] | None = None, deep: bool = False):
+    """Generator of events: {"type": "step"|"delta"|"reset"|"done", ...}.
+
+    "delta" is answer text as it is written; "reset" tells the UI to drop the text streamed so far in this step
+    (the model wrote a preamble and then called a tool); "done" carries {"answer", "steps", "sources", "usage"}.
+    """
     c = ai.client()
     if not c:
         rows = db.search(question)
         lines = [f"- {e['subject']} ({e['sender']}, {e['date'][:10]})" for e in rows]
-        return {
+        yield {
+            "type": "done",
             "answer": "No ANTHROPIC_API_KEY set, so here are the emails that best match:\n" + "\n".join(lines),
             "steps": [],
             "sources": [_src(e) for e in rows],
         }
+        return
 
     model = DEEP_MODEL if deep else MODEL
     prior = [
@@ -180,23 +198,38 @@ def ask(question: str, history: list[dict] | None = None, deep: bool = False) ->
             db.log_usage(info, deep)
         except Exception as ex:  # logging must never break an answer
             print("usage log failed:", ex)
-        return {"answer": answer, "steps": steps, "sources": sources, "usage": info}
+        return {"type": "done", "answer": answer, "steps": steps, "sources": sources, "usage": info}
 
     for step in range(MAX_STEPS):
-        resp = _create(c, messages, model, force_answer=step == MAX_STEPS - 1)
+        gen = _stream_step(c, messages, model, force_answer=step == MAX_STEPS - 1)
+        streamed = False
+        while True:
+            try:
+                kind, text = next(gen)
+            except StopIteration as stop:
+                resp = stop.value
+                break
+            streamed = True
+            yield {"type": "delta", "text": text}
         usage.add(resp)
         if resp.stop_reason == "refusal":
-            return finish("I can't help with that one.", [])
+            yield finish("I can't help with that one.", [])
+            return
         if resp.stop_reason != "tool_use":
             text = "".join(b.text for b in resp.content if b.type == "text").strip()
             if resp.stop_reason == "max_tokens":
                 text += "\n\n(Answer was cut off.)"
-            return finish(text or "I couldn't produce an answer.", [_src(e) for e in seen.values()][:8])
+            yield finish(text or "I couldn't produce an answer.", [_src(e) for e in seen.values()][:8])
+            return
+        if streamed:
+            yield {"type": "reset"}  # preamble before a tool call is not part of the answer
         messages.append({"role": "assistant", "content": resp.content})
         results = []
         for b in resp.content:
             if b.type == "tool_use":
-                steps.append(_describe(b.name, b.input))
+                desc = _describe(b.name, b.input)
+                steps.append(desc)
+                yield {"type": "step", "text": desc}
                 key = b.name + json.dumps(b.input, sort_keys=True)
                 try:
                     if key in done_calls:  # the model repeated itself: don't pay to resend the same results
@@ -207,8 +240,17 @@ def ask(question: str, history: list[dict] | None = None, deep: bool = False) ->
                 except Exception as ex:
                     results.append({"type": "tool_result", "tool_use_id": b.id, "content": str(ex), "is_error": True})
         messages.append({"role": "user", "content": results})  # all results in one message
-    return finish("I searched a lot but couldn't settle on an answer. Try narrowing the question.",
-                  [_src(e) for e in seen.values()][:8])
+    yield finish("I searched a lot but couldn't settle on an answer. Try narrowing the question.",
+                 [_src(e) for e in seen.values()][:8])
+
+
+def ask(question: str, history: list[dict] | None = None, deep: bool = False) -> dict:
+    """Non-streaming wrapper: returns {"answer", "steps", "sources", "usage"}."""
+    result = {}
+    for ev in ask_stream(question, history, deep):
+        if ev["type"] == "done":
+            result = {k: v for k, v in ev.items() if k != "type"}
+    return result
 
 
 def _src(e: dict) -> dict:

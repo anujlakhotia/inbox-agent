@@ -42,5 +42,6 @@ button { font: inherit; cursor: pointer; }
 #askform button { border-radius: 999px; padding: 0 18px; border: 1px solid var(--accent); }
 .deep { display: flex; align-items: center; gap: 4px; font-size: .85rem; color: var(--muted); white-space: nowrap; }
 .msg .usage { font-size: .75rem; }
+.msg .status { color: var(--muted); font-size: .85rem; font-style: italic; }
 #toast { position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%); background: var(--ink); color: var(--bg); padding: 8px 14px; border-radius: 8px; opacity: 0; transition: opacity .2s; pointer-events: none; font-size: .9rem; }
 #toast.show { opacity: 1; }
